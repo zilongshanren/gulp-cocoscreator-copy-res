@@ -12,7 +12,9 @@
   "dependencies": {
     "copy-dir": "^0.3.0",
     "gulp-util": "^3.0.8",
-    "mkdirp": "^0.5.1"
+    "mkdirp": "^0.5.1",
+    "rimraf": "^2.6.2",
+    "gulp-util": "^3.0.8",
   },
   "repository": {
     "type": "git",
