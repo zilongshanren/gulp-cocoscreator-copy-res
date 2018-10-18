@@ -1,0 +1,17 @@
+{
+  "name": "gulp-cocoscreator-rev",
+  "version": "1.0.0",
+  "description": ">对CocosCreator构建小游戏后的首屏资源拷贝到指定目录",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "zilongshanren <guanghui8827@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "copy-dir": "^0.3.0",
+    "gulp-util": "^3.0.8",
+    "mkdirp": "^0.5.1"
+  }
+}
