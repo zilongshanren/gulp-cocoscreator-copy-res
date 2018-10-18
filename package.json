@@ -1,5 +1,5 @@
 {
-  "name": "gulp-cocoscreator-rev",
+  "name": "gulp-cocoscreator-copy-res",
   "version": "1.0.0",
   "description": ">对CocosCreator构建小游戏后的首屏资源拷贝到指定目录",
   "main": "index.js",
