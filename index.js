@@ -12,6 +12,35 @@ var rimraf = require('rimraf');
 
 var getDirName = require('path').dirname;
 
+var BASE64_KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+var BASE64_VALUES = new Array(123); // max char code in base64Keys
+for (let i = 0; i < 123; ++i) BASE64_VALUES[i] = 64; // fill with placeholder('=') index
+for (let i = 0; i < 64; ++i) BASE64_VALUES[BASE64_KEYS.charCodeAt(i)] = i;
+
+var HexChars = '0123456789abcdef'.split('');
+
+var _t = ['', '', '', ''];
+var UuidTemplate = _t.concat(_t, '-', _t, '-', _t, '-', _t, '-', _t, _t, _t);
+var Indices = UuidTemplate.map(function (x, i) { return x === '-' ? NaN : i; }).filter(isFinite);
+
+// fcmR3XADNLgJ1ByKhqcC5Z -> fc991dd7-0033-4b80-9d41-c8a86a702e59
+var decodeUUid = function (base64) {
+    if (base64.length !== 22) {
+        return base64;
+    }
+    UuidTemplate[0] = base64[0];
+    UuidTemplate[1] = base64[1];
+    for (var i = 2, j = 2; i < 22; i += 2) {
+        var lhs = BASE64_VALUES[base64.charCodeAt(i)];
+        var rhs = BASE64_VALUES[base64.charCodeAt(i + 1)];
+        UuidTemplate[Indices[j++]] = HexChars[lhs >> 2];
+        UuidTemplate[Indices[j++]] = HexChars[((lhs & 3) << 2) | rhs >> 4];
+        UuidTemplate[Indices[j++]] = HexChars[rhs & 0xF];
+    }
+    return UuidTemplate.join('');
+};
+
+
 function writeFile(path, contents, cb) {
   mkdirp(getDirName(path), function (err) {
     if (err) return cb(err);
@@ -62,20 +91,6 @@ function getSceneJsonFile (settings, sceneName) {
 }
 
 function getAllSceneImgMina (settings) {
-    const codeRawResList = [
-        'assets/RawResources/UITexture/Login/Loading_Bk.png',
-        'assets/RawResources/UITexture/Login/Loading_Pic2.png',
-        'assets/RawResources/UITexture/Login/login_BK.jpg',
-        'assets/RawResources/UITexture/Login/logo.png',
-        'assets/RawResources/UITexture/Login/Btn_Play.png',
-        'assets/RawResources/UITexture/Login/Play_Bottom.png',
-        'assets/RawResources/UITexture/Login/Selected_Bottom.png',
-        'assets/RawResources/UITexture/Login/Selected_Icon.png',
-        'assets/RawResources/UITexture/Login/Loading_Bk2.png',
-        'assets/RawResources/UITexture/Login/XCX_Share_Tips.png',
-        'assets/RawResources/UITexture/Login/Mask.png',
-        'assets/RawResources/UITexture/Login/XCX_Commond_Loading_Pic.png',
-                            ];
     const codeRawInternalList = ['internal/image/default_btn_disabled.png',
                                  'internal/image/default_btn_normal.png',
                                  'internal/image/default_btn_pressed.png'];
@@ -84,20 +99,31 @@ function getAllSceneImgMina (settings) {
 
     let allPaths = Object.keys(settings.rawAssetMap);
 
-    codeRawResList.forEach ( (url) => {
-        let realPath = '';
-        let suffix = url.substring(url.lastIndexOf('.'));
-        for (let i = 0; i < allPaths.length; ++i) {
-            let item = allPaths[i];
-            if (item.includes(url)) {
-                let uuid = settings.rawAssetMap[item][0];
-                let compressedUUidIndex = settings.uuids.indexOf(settings.rawAssetMap[item][1]);
-                let md5 = settings.md5AssetsMap['raw-assets'][settings.md5AssetsMap['raw-assets'].indexOf(compressedUUidIndex) + 1];
-                realPath = 'res/raw-assets/' + uuid.substring(0,2) + '/' + uuid + '.' + md5 + suffix;
-                resList.push(realPath);
-            }
+    let firstPackageAssets = settings.rawAssetMap.firstPackageAssets;
+
+    let decodedUuids = [];
+    settings.uuids.forEach((item) => {
+        decodedUuids.push(decodeUUid(item));
+    })
+
+    let md5Lists = [];
+    firstPackageAssets.forEach((item) => {
+        let filename = item.match(/[^\\/]+$/)[0];
+        filename = filename.substring(0, filename.lastIndexOf('.'));
+        let uuidIndex = decodedUuids.indexOf(filename);
+        if (filename && uuidIndex > -1) {
+            md5Lists.push(settings.md5AssetsMap['raw-assets'][settings.md5AssetsMap['raw-assets'].indexOf(uuidIndex) +1]);
         }
     })
+
+    firstPackageAssets.forEach((item, index) => {
+        item = item.replace(/(\.[^.\n\\/]*)$/, (function(match, p1) {
+            return "." + md5Lists[index] + p1;
+        }));
+
+        resList.push(item);
+    });
+
 
     codeRawInternalList.forEach ( (url) => {
         let realPath = '';
@@ -253,6 +279,7 @@ module.exports = ({
             settings = eval(settings);
 
             settings.rawAssetMap = rawAssetMap;
+
 
 
             handleAssets(settings);
