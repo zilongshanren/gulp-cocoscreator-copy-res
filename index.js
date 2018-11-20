@@ -17,6 +17,8 @@ var BASE64_VALUES = new Array(123); // max char code in base64Keys
 for (let i = 0; i < 123; ++i) BASE64_VALUES[i] = 64; // fill with placeholder('=') index
 for (let i = 0; i < 64; ++i) BASE64_VALUES[BASE64_KEYS.charCodeAt(i)] = i;
 
+let outputwxDepends = [];
+
 var HexChars = '0123456789abcdef'.split('');
 
 var _t = ['', '', '', ''];
@@ -90,16 +92,8 @@ function getSceneJsonFile (settings, sceneName) {
     return sceneJsonpath;
 }
 
-function getAllSceneImgMina (settings) {
-    const codeRawInternalList = ['internal/image/default_btn_disabled.png',
-                                 'internal/image/default_btn_normal.png',
-                                 'internal/image/default_btn_pressed.png'];
-    var resList = [];
-    var ExtnameRegex = /(\.[^.\n\\/]*)$/;
-
-    let allPaths = Object.keys(settings.rawAssetMap);
-
-    let firstPackageAssets = settings.rawAssetMap.firstPackageAssets;
+function getDependsWithMD5 (assets, settings) {
+    let firstPackageAssets = assets;
 
     let decodedUuids = [];
     settings.uuids.forEach((item) => {
@@ -116,6 +110,8 @@ function getAllSceneImgMina (settings) {
         }
     })
 
+    let resList = [];
+
     firstPackageAssets.forEach((item, index) => {
         item = item.replace(/(\.[^.\n\\/]*)$/, (function(match, p1) {
             return "." + md5Lists[index] + p1;
@@ -123,7 +119,30 @@ function getAllSceneImgMina (settings) {
 
         resList.push(item);
     });
+    return resList;
+}
 
+function getAllSceneImgMina (settings) {
+    const codeRawInternalList = ['internal/image/default_btn_disabled.png',
+                                 'internal/image/default_btn_normal.png',
+                                 'internal/image/default_btn_pressed.png'];
+    var resList = [];
+    var ExtnameRegex = /(\.[^.\n\\/]*)$/;
+
+    let allPaths = Object.keys(settings.rawAssetMap);
+
+    let testList = [];
+    let firstPackageAssets = settings.rawAssetMap.firstPackageAssets;
+    let wxDepends = settings.rawAssetMap.dependsWX;
+
+    resList = resList.concat(getDependsWithMD5(firstPackageAssets, settings));
+
+    testList = testList.concat(resList);
+    testList = testList.concat(getDependsWithMD5(wxDepends, settings));
+
+    // console.error('getAllSceneImgMina:');
+    // console.error(testList);
+    outputwxDepends = outputwxDepends.concat(testList);
 
     codeRawInternalList.forEach ( (url) => {
         let realPath = '';
@@ -145,17 +164,59 @@ function getAllSceneImgMina (settings) {
 }
 
 function copySceneAssetsFilesMina (settings) {
+    let cdnUrl = 'https://cdnhlmjtest.huanle.qq.com/';
+    let wxDir = 'wxfile://usr/';
+
     const resList = [];
     var loginSceneName = "db://assets/scenes/LoginScene.fire";
     resList.push(getSceneJsonFile(settings, loginSceneName));
-    // var mainSceneName = 'db://assets/scenes/ChooseUI_ChooseMainUI.fire';
-    // resList.push(getSceneJsonFile(settings, mainSceneName));
-    console.log(resList);
+
+    outputwxDepends.push(resList[0]);
+    var mainSceneName = 'db://assets/scenes/ChooseUI_ChooseMainUI.fire';
+    outputwxDepends.push(getSceneJsonFile(settings, mainSceneName));
+
+    //get all resources file, config jsons, game scene bg etc
+    let cdnResList = ['LocalConfig/FanConfig.json',
+                      'LocalConfig/PlayRuleGuide.json',
+                      'LocalConfig/PopwindowConfig.json',
+                      'LocalConfig/LanguageCfg.json',
+                     ];
+
+    let rawAssetsKeys = Object.keys(settings.rawAssets.assets);
+    cdnResList.forEach((item) => {
+        for (let i = 0; i < rawAssetsKeys.length; ++i) {
+            let key = rawAssetsKeys[i];
+            let url = settings.rawAssets.assets[key];
+            if (url) {
+                url = url[0];
+            }
+            if (url === item) {
+                let suffix = url.substring(url.lastIndexOf('.'));
+                let uuid = settings.uuids[key];
+                let decodedUUid = decodeUUid(uuid);
+                let compressedUUidIndex = parseInt(key);
+                let md5 = settings.md5AssetsMap['import'][settings.md5AssetsMap['import'].indexOf(compressedUUidIndex) + 1];
+                let realPath = 'res/import/' + decodedUUid.substring(0,2) + '/' + decodedUUid + '.' + md5 + suffix;
+                outputwxDepends.push(realPath);
+                break;
+            }
+        }
+    })
 
     //copy from dist/cdn to mina directory
     Array.prototype.push.apply(resList, getAllSceneImgMina(settings));
-    console.log(resList);
+    
+    outputwxDepends = outputwxDepends.map(item => {
+        item = item.replace(/\\/g, '/');
+        return {"path": wxDir + item, "url": cdnUrl + item};
+    });
+    console.log(outputwxDepends);
 
+
+
+    fs.writeFileSync("./test.js", JSON.stringify(outputwxDepends));
+
+    
     rimraf('./src/mina/res', function () {
         for (let i = 0; i < resList.length; ++i) {
             let destFilePath = './src/mina/' + resList[i];
@@ -280,9 +341,10 @@ module.exports = ({
 
             settings.rawAssetMap = rawAssetMap;
 
-
-
             handleAssets(settings);
+
+            delete settings.rawAssetMap.dependsWX;
+            delete settings.rawAssetMap.firstPackageAssets;
 
             fs.writeFileSync(settingsDest, prefix + JSON.stringify(settings) +';' + appendFunc);
 
